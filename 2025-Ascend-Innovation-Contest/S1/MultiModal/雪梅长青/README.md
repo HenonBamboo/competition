@@ -1,34 +1,10 @@
-# MindNLP 模型优化详细说明 (janus_model & Qwen)
+# MindNLP 模型优化详细说明 (Qwen)
 
-本文档详细记录了针对 janus_model 和 Qwen 模型的关键性能优化点，并附带了相应的核心代码实现。
+本文档详细记录了针对 Qwen 模型的关键性能优化点，并附带了相应的核心代码实现。
 
-## 1. janus_model 模型优化
+## 1. Qwen2-VL 模型优化
 
-### 1.1 Attention 计算算子优化 优化痛点:
-
-优化痛点：原有的 Attention 实现中使用 `ops.transpose` 结合 `view` 对 Query、Key、Value 状态进行维度变换。在 MindSpore 的 Ascend 后端执行时，`ops.transpose` 可能会产生额外的算子开销或内存重排效率不如专用算子库。
-
-改进方案：将通用的 `ops.transpose` 替换为 MindSpore Mint 模块下的 `mindspore.mint.swapaxes`。Mint 系列算子通常针对 PyTorch 语义对齐及底层硬件（如 NPU）进行了更深度的适配和融合优化，能够提升维度交换操作的效率。
-
-**源码实现** (`mindnlp/transformers/models/llama/modeling_llama.py`):
-
-**Python**
-
-```python
-# 修改前:
-query_states = ops.transpose(query_states.view(bsz, q_len, self.num_heads, self.head_dim), 1, 2)
-key_states = ops.transpose(key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
-value_states = ops.transpose(value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
-
-# 修改后:
-query_states = mindspore.mint.swapaxes(query_states.view(bsz, q_len, self.num_heads, self.head_dim), 1, 2)
-key_states = mindspore.mint.swapaxes(key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
-value_states = mindspore.mint.swapaxes(value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim), 1, 2)
-```
-
-## 2. Qwen2-VL 模型优化
-
-### 2.1 切片操作优化 (针对 Qwen2-VL)
+### 1.1 切片操作优化 (针对 Qwen2-VL)
 
 优化痛点：
 
@@ -92,7 +68,7 @@ return self.weight * hidden_states.to(input_dtype)
 ```
 
 
-## 3. 评测结果
+## 2. 评测结果
 
 | 评测指标 | 平均得分 |
 |---------|---------|
